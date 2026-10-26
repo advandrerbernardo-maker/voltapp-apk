@@ -120,7 +120,7 @@ async function loadMapLibre(){
     return await Promise.race([
       import(MAPLIBRE_MODULE),
       new Promise((_,reject)=>{
-        timeout=setTimeout(()=>reject(new Error('Biblioteca vetorial demorou a responder')),8500);
+        timeout=setTimeout(()=>reject(new Error('Biblioteca vetorial demorou a responder')),7000);
       })
     ]);
   }finally{clearTimeout(timeout)}
@@ -145,6 +145,7 @@ async function initMap(){
       style:VECTOR_STYLE,
       center:[center[1],center[0]],
       zoom:12,
+      pixelRatio:Math.min(window.devicePixelRatio||1,2),
       minZoom:3,
       maxZoom:19,
       bearing:0,pitch:0,maxPitch:0,
@@ -167,7 +168,7 @@ async function initMap(){
         if(error)reject(error);
         else resolve();
       };
-      const timer=setTimeout(()=>finish(new Error('Mapa vetorial demorou a carregar')),14000);
+      const timer=setTimeout(()=>finish(new Error('Mapa vetorial demorou a carregar')),10500);
       map.once('load',()=>finish());
       map.on('error',e=>{
         // Uma falha isolada de tile não deve desmontar o mapa.
@@ -180,7 +181,7 @@ async function initMap(){
     renderMarkers(shownStations(),true);
     bindMapResize();
     refreshMapSize();
-    $('mapStatus').textContent='Mapa vetorial · deslize e amplie com dois dedos';
+    $('mapStatus').textContent='Mapa vetorial · arraste com 1 dedo, amplie com 2';
   }catch(error){
     console.warn('Mapa vetorial indisponível; ativando mapa alternativo:',error?.message||error);
     try{map?.remove()}catch(_){}
