@@ -46,7 +46,7 @@ test('Aplicativo PWA elimina cache antigo e atualiza página e CSS pela rede',()
   assert.match(html,/app\.js\?v=0\.1\.1/);
 });
 
-test('Sem funcionamento ao vivo ou tarifas fictícias como fatos',()=>{
+test('Sem funcionamento ao vivo ou tarifas fictícias como fatos',async()=>{
   const real=await read('data/stations.json');
   assert.deepEqual(JSON.parse(real),[]);
   assert.match(script,/s\.is_demo\?' · FICTÍCIO'/);
