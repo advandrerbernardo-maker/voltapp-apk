@@ -20,7 +20,10 @@ function switchTab(tab){
   document.querySelectorAll('.view').forEach(el=>{const active=el.id===tab;el.hidden=!active;el.classList.toggle('active',active)});
   document.querySelectorAll('[data-tab]').forEach(btn=>{const active=btn.dataset.tab===tab;btn.classList.toggle('active',active);if(btn.classList.contains('nav-link')||btn.classList.contains('bottom-link'))btn.setAttribute('aria-current',active?'page':'false')});
   $('pageTitle').textContent=tabLabels[tab];
-  if(tab==='explorar'&&state.map)setTimeout(()=>state.map.invalidateSize(),60);
+  if(tab==='explorar'&&state.map){
+    requestAnimationFrame(()=>state.map.invalidateSize({pan:false}));
+    setTimeout(()=>state.map?.invalidateSize({pan:false}),180);
+  }
   window.scrollTo({top:0,behavior:'instant'});
 }
 function safeNavigate(tab){switchTab(tab);if(location.hash!=='#'+tab)history.replaceState(null,'','#'+tab)}
@@ -47,26 +50,70 @@ function renderList(){
   refreshDestinations();
 }
 function mapIcon(s){return window.L.divIcon({className:'map-pin-wrap',html:'<div class="map-pin '+(s.is_demo?'demo-pin':'')+'">ϟ</div>',iconSize:[36,36],iconAnchor:[18,18]})}
+let mapResizeFrame=0;
+function refreshMapSize(){
+  if(!state.map||$('explorar').hidden)return;
+  if(mapResizeFrame)cancelAnimationFrame(mapResizeFrame);
+  mapResizeFrame=requestAnimationFrame(()=>{
+    mapResizeFrame=0;
+    if(state.map&&!$('explorar').hidden)state.map.invalidateSize({pan:false,debounceMoveend:true});
+  });
+}
 function initMap(){
   const elem=$('map');
-  if(!window.L){elem.innerHTML='<div class="map-loading">Não foi possível carregar o mapa. Conecte-se à internet; a lista de locais permanece acessível.</div>';return}
+  if(!window.L){
+    elem.innerHTML='<div class="map-loading">O mapa não conseguiu carregar. Confira sua conexão com a internet e abra o aplicativo novamente. A lista de eletropostos continua disponível.</div>';
+    return;
+  }
   elem.innerHTML='';
-  state.map=window.L.map(elem,{zoomControl:true,scrollWheelZoom:false}).setView(center,12);
-  window.L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{
-    maxZoom:19,attribution:'&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a>'
-  }).addTo(state.map);
-  renderMarkers(shownStations());
+  state.map=window.L.map(elem,{
+    zoomControl:true,
+    scrollWheelZoom:false,
+    preferCanvas:true,
+    fadeAnimation:false
+  }).setView(center,12,{animate:false});
+  const layer=window.L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{
+    maxZoom:19,
+    updateWhenIdle:true,
+    keepBuffer:2,
+    detectRetina:false,
+    attribution:'&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a>'
+  });
+  let tileErrors=0;
+  layer.on('tileerror',()=>{
+    tileErrors++;
+    if(tileErrors===5)toast('Algumas imagens do mapa não carregaram. Verifique sua conexão.');
+  });
+  layer.addTo(state.map);
+  renderMarkers(shownStations(),true);
+  state.map.whenReady(refreshMapSize);
+  if('ResizeObserver' in window){
+    const observer=new ResizeObserver(()=>refreshMapSize());
+    observer.observe(elem);
+  }
+  window.addEventListener('orientationchange',()=>setTimeout(refreshMapSize,220));
+  window.addEventListener('resize',refreshMapSize,{passive:true});
+  document.addEventListener('visibilitychange',()=>{
+    if(!document.hidden)refreshMapSize();
+  });
+  setTimeout(refreshMapSize,250);
 }
-function renderMarkers(stations){
+function renderMarkers(stations,focus=false){
   if(!state.map||!window.L)return;
   state.markers.forEach(m=>state.map.removeLayer(m));state.markers=[];
   for(const s of stations){
     const marker=window.L.marker([s.latitude,s.longitude],{icon:mapIcon(s)})
-      .addTo(state.map).bindTooltip(s.name+(s.is_demo?' · FICTÍCIO':''));
+      .addTo(state.map).bindTooltip(escapeHTML(s.name)+(s.is_demo?' · FICTÍCIO':''));
     marker.on('click',()=>openStation(s));state.markers.push(marker);
   }
-  if(stations.length){const group=window.L.featureGroup(state.markers);state.map.fitBounds(group.getBounds().pad(.25),{maxZoom:13});}
-  else state.map.setView(center,12);
+  // Pesquisar e filtrar não recentraliza o mapa de forma brusca.
+  if(focus && stations.length){
+    const group=window.L.featureGroup(state.markers);
+    state.map.fitBounds(group.getBounds().pad(.25),{maxZoom:13,animate:false});
+  }else if(focus){
+    state.map.setView(center,12,{animate:false});
+  }
+  refreshMapSize();
 }
 function sourceMarkup(s){
   if(s.is_demo)return '<span style="color:#ffd38a">Exemplo fictício — nenhuma fonte real.</span>';
@@ -162,7 +209,7 @@ async function planRoute(event){
 async function init(){
   document.querySelectorAll('[data-tab]').forEach(btn=>btn.addEventListener('click',()=>safeNavigate(btn.dataset.tab)));
   $('searchInput').addEventListener('input',renderList);$('connectorSelect').addEventListener('change',renderList);
-  $('demoToggle').addEventListener('change',e=>{state.demo=e.target.checked;$('searchInput').value='';$('connectorSelect').value='all';renderList();toast(state.demo?'MODO DEMONSTRAÇÃO: todos os postos e preços exibidos são fictícios.':'Demonstração desativada. Somente dados reais cadastrados aparecerão.')});
+  $('demoToggle').addEventListener('change',e=>{state.demo=e.target.checked;$('searchInput').value='';$('connectorSelect').value='all';renderList();renderMarkers(shownStations(),true);toast(state.demo?'MODO DEMONSTRAÇÃO: todos os postos e preços exibidos são fictícios.':'Demonstração desativada. Somente dados reais cadastrados aparecerão.')});
   $('geolocateBtn').addEventListener('click',geolocate);
   $('routeForm').addEventListener('submit',planRoute);
   $('modalClose').addEventListener('click',closeModal);
