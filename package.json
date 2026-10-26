@@ -1,0 +1,11 @@
+{
+  "name": "voltapp-mvp",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Voltapp — PWA piloto, sem dados fictícios no mapa real",
+  "scripts": {
+    "start": "npx --yes serve -l 4173 .",
+    "test": "node --test tests/*.test.mjs"
+  }
+}

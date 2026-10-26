@@ -1,0 +1,17 @@
+[
+  {
+    "id": "DEMO-001", "name": "Ponto Demonstrativo 01", "operator": "Operador fictício", "address": "Localização aproximada de demonstração — Centro", "city": "Manaus", "state": "AM", "latitude": -3.119, "longitude": -60.022,
+    "hours": "08:00 às 22:00 (exemplo)", "access_rules": "Exemplo: acesso condicionado à abertura do estacionamento", "parking": "Valor não incluído / fictício", "connectors": ["CCS2"], "power_kw": 60,
+    "tariff": {"type": "kwh", "amount_brl": 1.89, "session_fee_brl": 0, "parking_fee_brl": null}, "source_url": null, "verified_at": null, "is_demo": true
+  },
+  {
+    "id": "DEMO-002", "name": "Ponto Demonstrativo 02", "operator": "Operador fictício", "address": "Localização aproximada de demonstração — Ponta Negra", "city": "Manaus", "state": "AM", "latitude": -3.063, "longitude": -60.094,
+    "hours": "10:00 às 22:00 (exemplo)", "access_rules": "Exemplo: somente clientes do estabelecimento", "parking": "Exemplo: estacionamento cobrado à parte", "connectors": ["Type 2"], "power_kw": 22,
+    "tariff": {"type": "kwh", "amount_brl": 0, "session_fee_brl": 0, "parking_fee_brl": null}, "source_url": null, "verified_at": null, "is_demo": true
+  },
+  {
+    "id": "DEMO-003", "name": "Ponto Demonstrativo 03", "operator": "Operador fictício", "address": "Localização aproximada de demonstração — Flores", "city": "Manaus", "state": "AM", "latitude": -3.077, "longitude": -60.006,
+    "hours": "24 horas (exemplo)", "access_rules": "Exemplo: cadastro no aplicativo do operador", "parking": "Exemplo: taxa conforme permanência", "connectors": ["CCS2", "Type 2"], "power_kw": 40,
+    "tariff": {"type": "minute", "amount_brl": 0.65, "session_fee_brl": null, "parking_fee_brl": null}, "source_url": null, "verified_at": null, "is_demo": true
+  }
+]
