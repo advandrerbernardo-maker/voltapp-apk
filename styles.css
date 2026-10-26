@@ -14,7 +14,7 @@
 .map-to-list:active{transform:scale(.97)}
 .maplibregl-map{position:relative;overflow:hidden;font-family:'DM Sans',sans-serif}
 .maplibregl-canvas-container{width:100%;height:100%}
-.maplibregl-canvas{position:absolute;left:0;top:0}
+.maplibregl-canvas{position:absolute;left:0;top:0;touch-action:none}
 .maplibregl-ctrl-group{border-radius:14px!important;overflow:hidden;box-shadow:0 4px 16px #00171f77!important}
 .maplibregl-ctrl button{width:39px!important;height:39px!important}
 .maplibregl-ctrl-attrib{font-size:9px!important}
