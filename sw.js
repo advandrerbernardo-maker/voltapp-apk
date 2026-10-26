@@ -1,5 +1,5 @@
-// Voltapp 0.1.1: corrige cache antigo que mantinha CSS defeituoso do mapa.
-const CACHE='voltapp-shell-v0.1.1';
+// Voltapp 0.2.0: prioriza mapa vetorial WebGL e interface móvel tipo navegador de mapas.
+const CACHE='voltapp-shell-v0.2.0';
 const STATIC=[
   './','./index.html','./styles.css','./app.js','./logic.mjs',
   './vendor/leaflet.css','./data/stations.example.json',
