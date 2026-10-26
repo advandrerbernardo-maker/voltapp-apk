@@ -1,7 +1,7 @@
 import {formatBRL,daysSince,isTariffVerified,validateStation,tariffLabel,estimateRoute} from './logic.mjs';
 
 const $=id=>document.getElementById(id);
-const state={real:[],example:[],demo:false,map:null,markers:[],currentCoords:null,routing:false,installPrompt:null};
+const state={real:[],example:[],demo:false,map:null,markers:[],currentCoords:null,routing:false,installPrompt:null,mapEngine:null,gl:null,userMarker:null};
 const center=[-3.119027,-60.021731]; // Centro de Manaus, apenas referência de enquadramento.
 const tabLabels={explorar:'Explorar eletropostos',planejar:'Planejar viagem',clube:'Clube VIP',sobre:'Sobre os dados'};
 const escapeHTML=value=>String(value??'').replace(/[&<>"']/g,x=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[x]));
@@ -21,8 +21,8 @@ function switchTab(tab){
   document.querySelectorAll('[data-tab]').forEach(btn=>{const active=btn.dataset.tab===tab;btn.classList.toggle('active',active);if(btn.classList.contains('nav-link')||btn.classList.contains('bottom-link'))btn.setAttribute('aria-current',active?'page':'false')});
   $('pageTitle').textContent=tabLabels[tab];
   if(tab==='explorar'&&state.map){
-    requestAnimationFrame(()=>state.map.invalidateSize({pan:false}));
-    setTimeout(()=>state.map?.invalidateSize({pan:false}),180);
+    requestAnimationFrame(refreshMapSize);
+    setTimeout(refreshMapSize,180);
   }
   window.scrollTo({top:0,behavior:'instant'});
 }
@@ -50,68 +50,181 @@ function renderList(){
   refreshDestinations();
 }
 function mapIcon(s){return window.L.divIcon({className:'map-pin-wrap',html:'<div class="map-pin '+(s.is_demo?'demo-pin':'')+'">ϟ</div>',iconSize:[36,36],iconAnchor:[18,18]})}
+// Renderização vetorial WebGL acelera gestos e zoom; Leaflet permanece como fallback.
+const MAPLIBRE_MODULE='https://unpkg.com/maplibre-gl@6.16.0/dist/maplibre-gl.mjs';
+const VECTOR_STYLE='https://tiles.openfreemap.org/styles/liberty';
 let mapResizeFrame=0;
+let mapResizeObserver=null;
+let mapControlsBound=false;
 function refreshMapSize(){
   if(!state.map||$('explorar').hidden)return;
   if(mapResizeFrame)cancelAnimationFrame(mapResizeFrame);
   mapResizeFrame=requestAnimationFrame(()=>{
     mapResizeFrame=0;
-    if(state.map&&!$('explorar').hidden)state.map.invalidateSize({pan:false,debounceMoveend:true});
+    if(!state.map||$('explorar').hidden)return;
+    if(state.mapEngine==='vector')state.map.resize();
+    else state.map.invalidateSize({pan:false,debounceMoveend:true});
   });
 }
-function initMap(){
+function bindMapResize(){
+  if(mapControlsBound)return;
+  mapControlsBound=true;
   const elem=$('map');
-  if(!window.L){
-    elem.innerHTML='<div class="map-loading">O mapa não conseguiu carregar. Confira sua conexão com a internet e abra o aplicativo novamente. A lista de eletropostos continua disponível.</div>';
-    return;
-  }
-  elem.innerHTML='';
-  state.map=window.L.map(elem,{
-    zoomControl:true,
-    scrollWheelZoom:false,
-    preferCanvas:true,
-    fadeAnimation:false
-  }).setView(center,12,{animate:false});
-  const layer=window.L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{
-    maxZoom:19,
-    updateWhenIdle:true,
-    keepBuffer:2,
-    detectRetina:false,
-    attribution:'&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a>'
-  });
-  let tileErrors=0;
-  layer.on('tileerror',()=>{
-    tileErrors++;
-    if(tileErrors===5)toast('Algumas imagens do mapa não carregaram. Verifique sua conexão.');
-  });
-  layer.addTo(state.map);
-  renderMarkers(shownStations(),true);
-  state.map.whenReady(refreshMapSize);
   if('ResizeObserver' in window){
-    const observer=new ResizeObserver(()=>refreshMapSize());
-    observer.observe(elem);
+    mapResizeObserver=new ResizeObserver(refreshMapSize);
+    mapResizeObserver.observe(elem);
   }
-  window.addEventListener('orientationchange',()=>setTimeout(refreshMapSize,220));
+  window.addEventListener('orientationchange',()=>setTimeout(refreshMapSize,240));
   window.addEventListener('resize',refreshMapSize,{passive:true});
   document.addEventListener('visibilitychange',()=>{
     if(!document.hidden)refreshMapSize();
   });
-  setTimeout(refreshMapSize,250);
+}
+function makePin(s,extra=''){
+  const div=document.createElement('div');
+  div.className='map-pin '+(s?.is_demo?'demo-pin ':'')+extra;
+  div.textContent='ϟ';
+  div.setAttribute('aria-label',s?.name||'Localização');
+  return div;
+}
+function initRasterFallback(){
+  const elem=$('map');
+  elem.replaceChildren();
+  if(!window.L){
+    elem.innerHTML='<div class="map-loading">O mapa não pôde ser carregado. Confira sua conexão. A lista de locais continua disponível.</div>';
+    state.map=null;state.mapEngine=null;
+    return;
+  }
+  state.mapEngine='raster';
+  state.map=window.L.map(elem,{
+    zoomControl:true,scrollWheelZoom:false,
+    preferCanvas:true,fadeAnimation:false,
+    inertia:true,inertiaDeceleration:2400,
+    wheelPxPerZoomLevel:80
+  }).setView(center,12,{animate:false});
+  const tiles=window.L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{
+    maxZoom:19,updateWhenIdle:true,keepBuffer:2,detectRetina:false,
+    attribution:'&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a>'
+  });
+  let failures=0;
+  tiles.on('tileerror',()=>{if(++failures===5)toast('Algumas imagens do mapa não carregaram. Verifique a internet.')});
+  tiles.addTo(state.map);
+  renderMarkers(shownStations(),true);
+  bindMapResize();
+  setTimeout(refreshMapSize,180);
+}
+async function loadMapLibre(){
+  // A rota CDN tem limite curto; falhas de rede/WebGL não devem bloquear o app.
+  let timeout;
+  try{
+    return await Promise.race([
+      import(MAPLIBRE_MODULE),
+      new Promise((_,reject)=>{
+        timeout=setTimeout(()=>reject(new Error('Biblioteca vetorial demorou a responder')),8500);
+      })
+    ]);
+  }finally{clearTimeout(timeout)}
+}
+async function initMap(){
+  const elem=$('map');
+  if(!window.WebGL2RenderingContext){
+    initRasterFallback();
+    return;
+  }
+  let map=null;
+  try{
+    const gl=await loadMapLibre();
+    if(!gl?.Map||!gl?.Marker)throw new Error('Módulo MapLibre incompleto');
+    const gpuTest=document.createElement('canvas');
+    if(!gpuTest.getContext('webgl2',{failIfMajorPerformanceCaveat:true})){
+      throw new Error('WebGL acelerado indisponível neste aparelho');
+    }
+    elem.replaceChildren();
+    map=new gl.Map({
+      container:elem,
+      style:VECTOR_STYLE,
+      center:[center[1],center[0]],
+      zoom:12,
+      minZoom:3,
+      maxZoom:19,
+      bearing:0,pitch:0,maxPitch:0,
+      dragRotate:false,touchPitch:false,
+      touchZoomRotate:true,
+      cooperativeGestures:false,
+      attributionControl:true,
+      renderWorldCopies:false,
+      fadeDuration:0,
+      antialias:false,
+      trackResize:true
+    });
+    let failures=0;
+    await new Promise((resolve,reject)=>{
+      let settled=false;
+      const finish=(error)=>{
+        if(settled)return;
+        settled=true;
+        clearTimeout(timer);
+        if(error)reject(error);
+        else resolve();
+      };
+      const timer=setTimeout(()=>finish(new Error('Mapa vetorial demorou a carregar')),14000);
+      map.once('load',()=>finish());
+      map.on('error',e=>{
+        // Uma falha isolada de tile não deve desmontar o mapa.
+        if(++failures>=6&&!settled)finish(new Error('Falha ao baixar o mapa vetorial'));
+        if(settled&&failures===8)toast('Parte do mapa não carregou. Confira a internet.');
+      });
+    });
+    state.gl=gl;state.map=map;state.mapEngine='vector';
+    map.addControl(new gl.NavigationControl({showCompass:false,visualizePitch:false}),'bottom-right');
+    renderMarkers(shownStations(),true);
+    bindMapResize();
+    refreshMapSize();
+    $('mapStatus').textContent='Mapa vetorial · deslize e amplie com dois dedos';
+  }catch(error){
+    console.warn('Mapa vetorial indisponível; ativando mapa alternativo:',error?.message||error);
+    try{map?.remove()}catch(_){}
+    state.map=null;state.gl=null;
+    initRasterFallback();
+    $('mapStatus').textContent='Modo compatibilidade · mapa com gestos';
+  }
 }
 function renderMarkers(stations,focus=false){
-  if(!state.map||!window.L)return;
-  state.markers.forEach(m=>state.map.removeLayer(m));state.markers=[];
-  for(const s of stations){
-    const marker=window.L.marker([s.latitude,s.longitude],{icon:mapIcon(s)})
-      .addTo(state.map).bindTooltip(escapeHTML(s.name)+(s.is_demo?' · FICTÍCIO':''));
-    marker.on('click',()=>openStation(s));state.markers.push(marker);
-  }
-  // Pesquisar e filtrar não recentraliza o mapa de forma brusca.
-  if(focus && stations.length){
-    const group=window.L.featureGroup(state.markers);
-    state.map.fitBounds(group.getBounds().pad(.25),{maxZoom:13,animate:false});
-  }else if(focus){
-    state.map.setView(center,12,{animate:false});
+  if(!state.map)return;
+  if(state.mapEngine==='vector'){
+    state.markers.forEach(m=>m.remove());
+    state.markers=[];
+    for(const s of stations){
+      const pin=makePin(s);
+      pin.style.cursor='pointer';
+      const marker=new state.gl.Marker({element:pin,anchor:'center'})
+        .setLngLat([s.longitude,s.latitude]).addTo(state.map);
+      pin.addEventListener('click',()=>openStation(s));
+      state.markers.push(marker);
+    }
+    if(focus&&stations.length){
+      if(stations.length===1){
+        const s=stations[0];
+        state.map.easeTo({center:[s.longitude,s.latitude],zoom:Math.max(13,state.map.getZoom()),duration:400});
+      }else{
+        const bounds=new state.gl.LngLatBounds();
+        for(const s of stations)bounds.extend([s.longitude,s.latitude]);
+        state.map.fitBounds(bounds,{padding:{top:65,bottom:85,left:45,right:45},maxZoom:13,duration:420});
+      }
+    }else if(focus){
+      state.map.jumpTo({center:[center[1],center[0]],zoom:12});
+    }
+  }else if(state.mapEngine==='raster'&&window.L){
+    state.markers.forEach(m=>state.map.removeLayer(m));state.markers=[];
+    for(const s of stations){
+      const marker=window.L.marker([s.latitude,s.longitude],{icon:mapIcon(s)})
+        .addTo(state.map).bindTooltip(escapeHTML(s.name)+(s.is_demo?' · FICTÍCIO':''));
+      marker.on('click',()=>openStation(s));state.markers.push(marker);
+    }
+    if(focus&&stations.length){
+      const group=window.L.featureGroup(state.markers);
+      state.map.fitBounds(group.getBounds().pad(.25),{maxZoom:13,animate:true,duration:0.35});
+    }else if(focus)state.map.setView(center,12,{animate:false});
   }
   refreshMapSize();
 }
@@ -164,7 +277,32 @@ function getGPS(){return new Promise((resolve,reject)=>{
   if(!navigator.geolocation)return reject(new Error('GPS indisponível'));
   navigator.geolocation.getCurrentPosition(({coords})=>resolve([coords.latitude,coords.longitude]),()=>reject(new Error('A localização não foi autorizada ou não pôde ser obtida.')),{enableHighAccuracy:false,timeout:10000,maximumAge:120000});
 })}
-async function geolocate(){try{const coords=await getGPS();state.currentCoords=coords;if(state.map){state.map.setView(coords,14);const icon=window.L.divIcon({className:'map-pin-wrap',html:'<div class="map-pin marker-user">●</div>',iconSize:[36,36],iconAnchor:[18,18]});window.L.marker(coords,{icon}).addTo(state.map).bindPopup('Sua localização aproximada');}toast('Mapa centralizado na sua posição aproximada.')}catch(e){toast(e.message)}}
+async function geolocate(){
+  try{
+    const coords=await getGPS();
+    state.currentCoords=coords;
+    if(state.map){
+      if(state.userMarker){
+        if(state.mapEngine==='vector')state.userMarker.remove();
+        else state.map.removeLayer(state.userMarker);
+      }
+      if(state.mapEngine==='vector'){
+        const el=document.createElement('div');
+        el.className='map-pin marker-user';
+        el.textContent='●';
+        el.title='Sua localização aproximada';
+        state.userMarker=new state.gl.Marker({element:el,anchor:'center'})
+          .setLngLat([coords[1],coords[0]]).addTo(state.map);
+        state.map.flyTo({center:[coords[1],coords[0]],zoom:15,duration:550,essential:true});
+      }else if(state.mapEngine==='raster'){
+        state.map.setView(coords,14,{animate:true});
+        const icon=window.L.divIcon({className:'map-pin-wrap',html:'<div class="map-pin marker-user">●</div>',iconSize:[36,36],iconAnchor:[18,18]});
+        state.userMarker=window.L.marker(coords,{icon}).addTo(state.map).bindPopup('Sua localização aproximada');
+      }
+    }
+    toast('Mapa centralizado na sua localização aproximada.');
+  }catch(e){toast(e.message)}
+}
 function showRouteResult({route,station,isDemo}){
   const el=$('routeResult');el.className='calc-card';
   const warning=route.feasible?'<div class="calc-warning calc-good">A autonomia estimada cobre este trecho com a reserva definida. Isso não garante que o percurso real será viável em todas as condições.</div>':
@@ -211,6 +349,7 @@ async function init(){
   $('searchInput').addEventListener('input',renderList);$('connectorSelect').addEventListener('change',renderList);
   $('demoToggle').addEventListener('change',e=>{state.demo=e.target.checked;$('searchInput').value='';$('connectorSelect').value='all';renderList();renderMarkers(shownStations(),true);toast(state.demo?'MODO DEMONSTRAÇÃO: todos os postos e preços exibidos são fictícios.':'Demonstração desativada. Somente dados reais cadastrados aparecerão.')});
   $('geolocateBtn').addEventListener('click',geolocate);
+  $('mapToListBtn')?.addEventListener('click',()=>document.querySelector('.list-shell')?.scrollIntoView({behavior:'smooth',block:'start'}));
   $('routeForm').addEventListener('submit',planRoute);
   $('modalClose').addEventListener('click',closeModal);
   $('stationModal').addEventListener('click',e=>{if(e.target.dataset.close==='true')closeModal()});
