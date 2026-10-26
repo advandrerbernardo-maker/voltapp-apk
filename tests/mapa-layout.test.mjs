@@ -16,6 +16,7 @@ test('O motor preferencial é MapLibre GL com ruas vetoriais OpenFreeMap e licen
   assert.match(script,/new gl\.Map\(/);
   assert.match(script,/getContext\('webgl2'/);
   assert.match(script,/renderWorldCopies:false/);
+  assert.match(script,/pixelRatio:Math\.min\(window\.devicePixelRatio\|\|1,2\)/);
 });
 
 test('Sem suporte WebGL ou sem internet há mapa Leaflet alternativo em vez de tela quebrada',()=>{
@@ -68,7 +69,7 @@ test('Carregamento é mais leve e cards mantêm nomes legíveis',()=>{
   assert.match(css,/\.leaflet-tile\{filter:none\}/);
   assert.match(css,/\.station-item-name\{display:block/);
   assert.match(css,/\.station-item-address\{display:block/);
-  assert.match(css,/\.maplibregl-canvas\{position:absolute;left:0;top:0\}/);
+  assert.match(css,/\.maplibregl-canvas\{position:absolute;left:0;top:0;touch-action:none\}/);
 });
 
 test('PWA promove imediatamente CSS/JS novos e invalida cache obsoleto',()=>{
