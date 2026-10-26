@@ -1,10 +1,24 @@
-# VOLTAPP ⚡ — Primeira versão funcional (MVP 0.1)
+# VOLTAPP ⚡ — Piloto corrigido (MVP 0.1.1)
 
 **Repositório escolhido:** <https://github.com/advandrerbernardo-maker/voltapp-apk>
 
 Aplicativo PWA para motoristas de veículos elétricos, orientado à transparência de **tarifas, horários e regras de acesso** dos eletropostos. O aplicativo **não afirma se algum equipamento está funcionando, ocupado ou disponível em tempo real**.
 
 > Nome de trabalho até verificar disponibilidade da marca Voltapp no INPI. Existe um aplicativo com nome parecido no segmento em outra jurisdição. Consultar especialista antes do lançamento público e da contratação de domínio.
+
+## Atualização 0.1.1 — mapa e Android (26/10/2026)
+
+A versão 0.1.0 tinha um problema de estilo do Leaflet: o `integrity` do CSS remoto **não correspondia ao arquivo oficial**, então navegadores bloqueavam o CSS necessário para posicionar os blocos do mapa. O JavaScript e algumas imagens carregavam, porém apareciam peças deslocadas e vazios.
+
+**Correções aplicadas:**
+- CSS oficial Leaflet 1.9.4 incluído localmente em `vendor/leaflet.css`; licença BSD preservada em `vendor/leaflet-LICENSE.txt`.
+- Contêiner do mapa reajustado quando muda tamanho, orientação do celular ou aba, sem pular de posição a cada busca.
+- Remoção de filtros visuais por imagem de mapa, reduzindo trabalho de composição gráfica.
+- Cabeçalho inicial mais compacto e nomes/endereços em linhas separadas nos cartões.
+- Service worker versão 0.1.1 elimina cache antigo, busca HTML e CSS/JS novos primeiro na rede e não guarda tarifas reais obsoletas.
+- Testes automatizados cobrem a presença do CSS Leaflet, componentes móveis e estratégia de cache.
+
+**Para quem já instalou:** com internet ativa, reabra o app; se ainda vir a tela antiga, atualize a página no Chrome, feche e abra novamente. **Não é necessário reinstalar nem limpar todos os dados do navegador.**
 
 ## O que funciona nesta entrega
 
@@ -32,9 +46,8 @@ Aplicativo PWA para motoristas de veículos elétricos, orientado à transparên
 O projeto foi preparado para o repositório oficial
 `advandrerbernardo-maker/voltapp-apk`, usando a branch `main`.
 
-Para tornar o PWA acessível, ative **Settings → Pages → Deploy from a branch**,
-selecione `main` e a pasta `/ (root)` e salve. A URL prevista, após a
-publicação ser confirmada, é:
+O GitHub Pages está configurado para **Deploy from a branch → main → / (root)**.
+O endereço é:
 
 https://advandrerbernardo-maker.github.io/voltapp-apk/
 
@@ -64,14 +77,15 @@ node --test tests/*.test.mjs
 
 ```text
 index.html               Interface do app
-styles.css               Design responsivo
+styles.css               Design responsivo e otimizações móveis
+vendor/leaflet.css       CSS oficial do mapa, servido localmente
 app.js                   Navegação, mapa, cards, modal e cálculo de rota
 logic.mjs                Regras de tarifa, validação e autonomia
 data/stations.json       Base de dados real (vazia até documentação)
 data/stations.example.json  Exemplos fictícios (nunca no mapa real)
 icons/                   Ícones próprios do PWA
 manifest.webmanifest     Instalação Android e web
-sw.js                    Cache básico da interface
+sw.js                    Cache PWA 0.1.1 com atualização de arquivos críticos
 README.md                Instruções e limitações
 docs/                    Produto e política de informação
 tests/                   Testes automatizados
