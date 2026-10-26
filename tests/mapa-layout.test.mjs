@@ -50,5 +50,5 @@ test('Sem funcionamento ao vivo ou tarifas fictícias como fatos',()=>{
   const real=await read('data/stations.json');
   assert.deepEqual(JSON.parse(real),[]);
   assert.match(script,/s\.is_demo\?' · FICTÍCIO'/);
-  assert.match(html,/não sabe se algum equipamento está funcionando/i);
+  assert.match(html,/não sabe se o equipamento está funcionando/i);
 });
